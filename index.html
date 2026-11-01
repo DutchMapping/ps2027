@@ -15,7 +15,7 @@
   .totals { text-align:right; font-size:13px; }
   .totals .big { font-weight:600; font-size:15px; }
   .ok { color:#16a34a; } .bad { color:#dc2626; }
-  .layout { display:grid; grid-template-columns:1fr 380px; gap:16px; }
+  .layout { display:grid; grid-template-columns:1fr 440px; gap:16px; }
   @media (max-width:900px) { .layout { grid-template-columns:1fr; } }
   .card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; box-shadow:0 1px 2px rgba(15,23,42,.05); }
   h2 { margin:0 0 10px; font-size:15px; }
@@ -34,6 +34,8 @@
   .mv:hover { background:none; color:#1e293b; }
   .del { border:none; background:none; padding:0; color:#94a3b8; font-size:13px; }
   .del:hover { background:none; color:#dc2626; }
+  .delta { font-weight:600; text-align:center; white-space:nowrap; }
+  .d-up { color:#16a34a; } .d-down { color:#dc2626; } .d-zero { color:#94a3b8; }
   .legend { display:flex; flex-wrap:wrap; gap:6px 10px; margin-top:10px; }
   .legend span { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; cursor:pointer; padding:2px 8px; border-radius:999px; background:#f1f5f9; }
   .legend span.active { background:#e2e8f0; outline:1px solid #cbd5e1; }
@@ -41,6 +43,7 @@
   .summary { margin-top:14px; background:#f8fafc; border-radius:10px; padding:12px; font-size:13px; }
   .summary div { display:flex; justify-content:space-between; padding:2px 0; color:#64748b; }
   .summary .t { color:#1e293b; font-weight:600; }
+  .footnote { margin-top:10px; font-size:11px; color:#94a3b8; }
 </style>
 </head>
 <body>
@@ -58,7 +61,7 @@
 
   <div class="layout">
     <div class="card">
-      <svg id="chamber" viewBox="0 0 800 620"></svg>
+      <svg id="chamber" viewBox="0 0 800 400"></svg>
       <div class="legend" id="legend"></div>
     </div>
     <div class="card">
@@ -68,11 +71,19 @@
       </div>
       <table>
         <thead>
-          <tr><th></th><th>Partij</th><th>Afk.</th><th style="width:60px">Zetels</th><th style="width:52px">Kleur</th><th style="width:24px"></th></tr>
+          <tr>
+            <th></th><th>Partij</th><th>Afk.</th>
+            <th style="width:56px">Zetels</th>
+            <th style="width:56px">2023</th>
+            <th style="width:44px">&#177;</th>
+            <th style="width:52px">Kleur</th>
+            <th style="width:24px"></th>
+          </tr>
         </thead>
         <tbody id="tbody"></tbody>
       </table>
       <div class="summary" id="summary"></div>
+      <p class="footnote">"2023" = uitslag Provinciale Statenverkiezingen 2023 (Kiesraad). Pro = GroenLinks + PvdA samen.</p>
     </div>
   </div>
 </div>
@@ -81,68 +92,100 @@
 /* ================= Data ================= */
 var TOTAL_SEATS = 47;
 var parties = [
-  { name: "Pro (GL\u2013PvdA)", abbr: "Pro", seats: 7, color: "#46962b" },
-  { name: "SP",      abbr: "SP",   seats: 3, color: "#e2001a" },
-  { name: "D66",     abbr: "D66",  seats: 3, color: "#009fe3" },
-  { name: "Volt",    abbr: "Volt", seats: 1, color: "#5c2d91" },
-  { name: "ChristenUnie", abbr: "CU", seats: 1, color: "#00968d" },
-  { name: "Partij voor de Dieren", abbr: "PvdD", seats: 2, color: "#0c5f35" },
-  { name: "50PLUS",  abbr: "50+",  seats: 1, color: "#9c2758" },
-  { name: "CDA",     abbr: "CDA",  seats: 5, color: "#0a7540" },
-  { name: "VVD",     abbr: "VVD",  seats: 5, color: "#ff7f00" },
-  { name: "JA21",    abbr: "JA21", seats: 2, color: "#0aa1dd" },
-  { name: "Forum voor Democratie", abbr: "FvD", seats: 2, color: "#4a2c82" },
-  { name: "PVV",     abbr: "PVV",  seats: 5, color: "#2f5aa8" },
-  { name: "BBB",     abbr: "BBB",  seats: 7, color: "#e8b400" }
+  { name: "Pro (GL\u2013PvdA)", abbr: "Pro", seats: 7, prev: 7,  color: "#46962b" },
+  { name: "SP",      abbr: "SP",   seats: 3, prev: 3,  color: "#e2001a" },
+  { name: "D66",     abbr: "D66",  seats: 3, prev: 3,  color: "#009fe3" },
+  { name: "Volt",    abbr: "Volt", seats: 0, prev: 0,  color: "#5c2d91" },
+  { name: "ChristenUnie", abbr: "CU", seats: 0, prev: 0, color: "#00968d" },
+  { name: "Partij voor de Dieren", abbr: "PvdD", seats: 2, prev: 2, color: "#0c5f35" },
+  { name: "50PLUS",  abbr: "50+",  seats: 1, prev: 1,  color: "#9c2758" },
+  { name: "Lokaal Limburg", abbr: "LL", seats: 2, prev: 2, color: "#8a6e3d" },
+  { name: "CDA",     abbr: "CDA",  seats: 5, prev: 5,  color: "#0a7540" },
+  { name: "VVD",     abbr: "VVD",  seats: 5, prev: 5,  color: "#ff7f00" },
+  { name: "JA21",    abbr: "JA21", seats: 2, prev: 2,  color: "#0aa1dd" },
+  { name: "Forum voor Democratie", abbr: "FvD", seats: 1, prev: 1, color: "#4a2c82" },
+  { name: "PVV",     abbr: "PVV",  seats: 6, prev: 6,  color: "#2f5aa8" },
+  { name: "BBB",     abbr: "BBB",  seats: 10, prev: 10, color: "#e8b400" }
 ];
 var hover = null; // party index
 
-/* ================= Fan geometry ================= */
-var CX = 400, CY = 390;
-var SPAN = 4.2;
-var PHI_L = Math.PI / 2 + SPAN / 2;
-var R_BASE = 150, R_STEP = 26, ROW_STEP = 34;
-var DESK_SPACING = 24, PAD = 16, DESK_W = 18, DESK_H = 12;
+/* ================= Chamber geometry =================
+   Concentric curved rows (a fan), party blocks side by side in spectrum order. */
+var SPAN = 3.4;                       // fan opening angle (rad), centred on top
+var PHI_L = Math.PI / 2 + SPAN / 2;    // angle of the left end of a row
+var R_MIN = 132, ROW_STEP = 42;        // radii of successive rows
+var SPACING = 26, AISLE = 20;          // desk spacing / gap between party blocks
+var DESK_W = 18, DESK_H = 12;
+var CX = 400;
 
 function buildLayout() {
-  var blocks = [];
+  /* --- 1. plan rows: fill parties (table order) into rows, keeping each block together --- */
+  var rows = [];
+  var cur = null;
+  function newRow() { cur = { blocks: [], used: 0 }; rows.push(cur); }
   for (var i = 0; i < parties.length; i++) {
     var p = parties[i];
     if (p.seats <= 0) continue;
-    var perRow = Math.min(p.seats, 8);
-    var rBase = R_BASE + perRow * R_STEP;
-    blocks.push({ id: i, p: p, perRow: perRow, rBase: rBase, raw: (perRow * DESK_SPACING + PAD) / rBase });
+    var rem = p.seats;
+    while (rem > 0) {
+      if (!cur) newRow();
+      var r = R_MIN + (rows.length - 1) * ROW_STEP;
+      var cap = r * SPAN;
+      var need = rem * SPACING + AISLE;
+      if (cur.used + need <= cap) {
+        cur.blocks.push({ id: i, n: rem });
+        cur.used += need;
+        rem = 0;
+      } else {
+        var m = Math.floor((cap - cur.used - AISLE) / SPACING);
+        if (m > 0) {
+          cur.blocks.push({ id: i, n: m });
+          cur.used += m * SPACING + AISLE;
+          rem -= m;
+        }
+        cur = null; // force a new row on the next pass
+      }
+    }
   }
-  var sumRaw = blocks.reduce(function (s, b) { return s + b.raw; }, 0) || 1;
-  var scale = SPAN / sumRaw;
-  var desks = [], labels = [], cum = 0;
 
-  blocks.forEach(function (b) {
-    var w = b.raw * scale;
-    var phiStart = PHI_L - cum;
-    var rows = Math.ceil(b.p.seats / b.perRow);
-    for (var q = 0; q < rows; q++) {
-      var inRow = Math.min(b.perRow, b.p.seats - q * b.perRow);
-      var r = b.rBase + q * ROW_STEP;
-      for (var k = 0; k < inRow; k++) {
-        var phi = phiStart - ((k + 0.5) / inRow) * w;
+  /* --- 2. place desks and labels --- */
+  var nRows = rows.length;
+  var rMax = R_MIN + Math.max(0, nRows - 1) * ROW_STEP;
+  var CY = rMax + 40;
+  var desks = [], labels = [];
+
+  rows.forEach(function (row, k) {
+    var r = R_MIN + k * ROW_STEP;
+    var seats = row.blocks.reduce(function (s, b) { return s + b.n; }, 0);
+    var gap = Math.max(14, (r * SPAN - seats * SPACING) / (row.blocks.length + 1));
+    var cum = gap;
+    row.blocks.forEach(function (b) {
+      for (var j = 0; j < b.n; j++) {
+        var s = cum + (j + 0.5) * SPACING;
+        var phi = PHI_L - s / r;
         desks.push({
           x: CX + r * Math.cos(phi),
           y: CY - r * Math.sin(phi),
           rot: 90 - (phi * 180) / Math.PI,
-          color: b.p.color, id: b.id
+          color: parties[b.id].color, id: b.id
         });
       }
-    }
-    var phiMid = phiStart - w / 2;
-    var lr = b.rBase - 26;
-    labels.push({ x: CX + lr * Math.cos(phiMid), y: CY - lr * Math.sin(phiMid) + 4, text: b.p.abbr, id: b.id });
-    cum += w;
+      var sMid = cum + (b.n * SPACING) / 2;
+      var phiM = PHI_L - sMid / r;
+      var lr = r - 24;
+      labels.push({
+        x: CX + lr * Math.cos(phiM),
+        y: CY - lr * Math.sin(phiM) + 3.5,
+        text: parties[b.id].abbr, id: b.id
+      });
+      cum += b.n * SPACING + gap;
+    });
   });
-  return { desks: desks, labels: labels };
+
+  return { desks: desks, labels: labels, CY: CY, rMax: rMax };
 }
 
-function describeFan(r) {
+function describeFan(r, CY) {
   var phiR = Math.PI / 2 - SPAN / 2;
   var x1 = CX + r * Math.cos(PHI_L), y1 = CY - r * Math.sin(PHI_L);
   var x2 = CX + r * Math.cos(phiR),  y2 = CY - r * Math.sin(phiR);
@@ -157,19 +200,23 @@ function f1(n) { return Math.round(n * 10) / 10; }
 function renderMap() {
   var L = buildLayout();
   var hovered = hover !== null ? parties[hover] : null;
-  var svg = '<path d="' + describeFan(R_BASE - 46) + '" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>';
+  var svg = $("chamber");
+  svg.setAttribute("viewBox", "0 0 800 " + Math.round(L.CY + 0.14 * L.rMax + 70));
+
+  var svgInner = '<path d="' + describeFan(R_MIN - 46, L.CY) + '" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>';
   L.labels.forEach(function (l) {
-    svg += '<text x="' + f1(l.x) + '" y="' + f1(l.y) + '" text-anchor="middle" font-size="11" font-weight="700" ' +
+    svgInner += '<text x="' + f1(l.x) + '" y="' + f1(l.y) + '" text-anchor="middle" font-size="10.5" font-weight="700" ' +
       'fill="' + (hover === l.id ? "#111827" : "#475569") + '" data-p="' + l.id + '" style="cursor:pointer">' + esc(l.text) + "</text>";
   });
   L.desks.forEach(function (d) {
-    svg += '<rect x="' + f1(d.x - DESK_W / 2) + '" y="' + f1(d.y - DESK_H / 2) + '" width="' + DESK_W + '" height="' + DESK_H +
+    svgInner += '<rect x="' + f1(d.x - DESK_W / 2) + '" y="' + f1(d.y - DESK_H / 2) + '" width="' + DESK_W + '" height="' + DESK_H +
       '" rx="2" fill="' + d.color + '" stroke="' + (hover === d.id ? "#111827" : "white") + '" stroke-width="' + (hover === d.id ? 2.5 : 1) +
       '" transform="rotate(' + f1(d.rot) + " " + f1(d.x) + " " + f1(d.y) + ')" data-p="' + d.id + '" style="cursor:pointer"/>';
   });
-  svg += '<text x="' + CX + '" y="' + (CY - 14) + '" text-anchor="middle" font-size="15" font-weight="700" fill="#94a3b8">' + esc(hovered ? hovered.abbr : "STATENZAAL") + "</text>";
-  svg += '<text x="' + CX + '" y="' + (CY + 8) + '" text-anchor="middle" font-size="12" fill="#94a3b8">' + esc(hovered ? hovered.seats + " zetels" : "LIMBURG") + "</text>";
-  $("chamber").innerHTML = svg;
+  var yInfo = L.CY + 0.14 * L.rMax + 26;
+  svgInner += '<text x="' + CX + '" y="' + f1(yInfo) + '" text-anchor="middle" font-size="15" font-weight="700" fill="#94a3b8">' + esc(hovered ? hovered.abbr : "STATENZAAL") + "</text>";
+  svgInner += '<text x="' + CX + '" y="' + f1(yInfo + 22) + '" text-anchor="middle" font-size="12" fill="#94a3b8">' + esc(hovered ? hovered.seats + " zetels" : "LIMBURG") + "</text>";
+  svg.innerHTML = svgInner;
 }
 
 function renderLegend() {
@@ -188,14 +235,29 @@ function renderTotals() {
   else { fl.textContent = "Verschil: " + (TOTAL_SEATS - total); fl.className = "bad"; }
 }
 
+function renderDeltas() {
+  parties.forEach(function (p, i) {
+    var cell = document.getElementById("delta-" + i);
+    if (!cell) return;
+    var d = p.seats - p.prev;
+    if (d > 0) { cell.textContent = "+" + d; cell.className = "delta d-up"; }
+    else if (d < 0) { cell.textContent = String(d); cell.className = "delta d-down"; }
+    else { cell.textContent = "\u2013"; cell.className = "delta d-zero"; }
+  });
+}
+
 function renderSummary() {
   var total = parties.reduce(function (s, p) { return s + p.seats; }, 0);
   var top = parties.slice().sort(function (a, b) { return b.seats - a.seats; })[0];
+  var prevTotal = parties.reduce(function (s, p) { return s + p.prev; }, 0);
   var ok = total === TOTAL_SEATS;
+  var balance = total - prevTotal;
+  var balTxt = balance === 0 ? "0" : (balance > 0 ? "+" + balance : String(balance));
   $("summary").innerHTML =
     "<div><span>Totaal</span><span class='t " + (ok ? "" : "bad") + "'>" + total + " zetels</span></div>" +
     "<div><span>Grootste partij</span><span>" + (top ? esc(top.abbr) + " (" + top.seats + ")" : "\u2013") + "</span></div>" +
-    "<div><span>Meerderheid nodig</span><span>" + (Math.floor(TOTAL_SEATS / 2) + 1) + " zetels</span></div>";
+    "<div><span>Meerderheid nodig</span><span>" + (Math.floor(TOTAL_SEATS / 2) + 1) + " zetels</span></div>" +
+    "<div><span>Netto t.o.v. 2023</span><span class='" + (balance > 0 ? "d-up" : balance < 0 ? "d-down" : "") + "'>" + balTxt + "</span></div>";
 }
 
 function renderTable() {
@@ -206,18 +268,21 @@ function renderTable() {
       '<td><input type="text" data-i="' + i + '" data-f="name" value="' + esc(p.name) + '"></td>' +
       '<td><input type="text" data-i="' + i + '" data-f="abbr" value="' + esc(p.abbr) + '"></td>' +
       '<td><input type="number" min="0" data-i="' + i + '" data-f="seats" value="' + p.seats + '"></td>' +
+      '<td><input type="number" min="0" data-i="' + i + '" data-f="prev" value="' + p.prev + '"></td>' +
+      '<td class="delta" id="delta-' + i + '"></td>' +
       '<td><input type="color" data-i="' + i + '" data-f="color" value="' + esc(p.color) + '"></td>' +
       '<td><button class="del" data-del="' + i + '" title="Verwijder">\u2715</button></td>' +
       "</tr>";
   });
   $("tbody").innerHTML = html;
+  renderDeltas();
 }
 
 function renderAll() {
   renderTable(); renderMap(); renderLegend(); renderTotals(); renderSummary();
 }
 function renderLive() { // keeps input focus while typing
-  renderMap(); renderLegend(); renderTotals(); renderSummary();
+  renderMap(); renderLegend(); renderTotals(); renderDeltas(); renderSummary();
 }
 
 /* ================= Events ================= */
@@ -226,6 +291,7 @@ $("tbody").addEventListener("input", function (e) {
   if (el.dataset.i === undefined) return;
   var i = +el.dataset.i, f = el.dataset.f;
   if (f === "seats") parties[i].seats = Math.max(0, parseInt(el.value || "0", 10) || 0);
+  else if (f === "prev") parties[i].prev = Math.max(0, parseInt(el.value || "0", 10) || 0);
   else if (f === "name") parties[i].name = el.value;
   else if (f === "abbr") parties[i].abbr = el.value;
   else if (f === "color") parties[i].color = el.value;
@@ -238,6 +304,7 @@ $("tbody").addEventListener("click", function (e) {
     var j = +t.dataset.mv, i = +t.dataset.i;
     if (j < 0 || j >= parties.length) return;
     var tmp = parties[i]; parties[i] = parties[j]; parties[j] = tmp;
+    hover = null;
     renderAll();
   } else if (t.dataset.del !== undefined) {
     parties.splice(+t.dataset.del, 1);
@@ -247,7 +314,7 @@ $("tbody").addEventListener("click", function (e) {
 });
 
 $("addParty").addEventListener("click", function () {
-  parties.push({ name: "Nieuwe partij", abbr: "NP", seats: 1, color: "#888888" });
+  parties.push({ name: "Nieuwe partij", abbr: "NP", seats: 1, prev: 0, color: "#888888" });
   renderAll();
 });
 
