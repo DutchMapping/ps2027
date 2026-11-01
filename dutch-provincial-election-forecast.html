@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Provinciale Staten 2027 — Poll Projection</title>
+<style>
+  :root {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: #16213a;
+    background: #f4f6fa;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; }
+  header { max-width: 1100px; margin: 0 auto 16px; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0; color: #5a6785; font-size: 13px; }
+  .layout { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 340px 1fr; gap: 16px; }
+  .card { background: #fff; border: 1px solid #dde3ef; border-radius: 10px; padding: 14px; }
+  .card h2 { margin: 0 0 10px; font-size: 15px; }
+  .card h3 { margin: 0 0 8px; font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { padding: 4px 6px; text-align: left; border-bottom: 1px solid #eef1f7; }
+  input[type="number"], input[type="text"] { width: 100%; padding: 3px 5px; border: 1px solid #ccd4e3; border-radius: 5px; font: inherit; }
+  input[type="color"] { width: 30px; height: 22px; padding: 0; border: none; background: none; cursor: pointer; }
+  .sumline { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 13px; }
+  .sumline.bad { color: #b3261e; font-weight: 600; }
+  button { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid #b9c2d6; background: #fff; border-radius: 6px; cursor: pointer; }
+  button:hover { background: #eef1f8; }
+  button.primary { background: #2455a4; color: #fff; border-color: #2455a4; }
+  button.primary:hover { background: #1c448a; }
+  .prov-title { display: flex; justify-content: space-between; align-items: baseline; }
+  .prov-title span { color: #5a6785; font-size: 13px; }
+  #map { width: 100%; display: block; }
+  .province { fill: #c9d6ec; stroke: #fff; stroke-width: 1.5; cursor: pointer; transition: fill .15s; }
+  .province:hover { fill: #9db8e2; }
+  .province.selected { stroke: #2455a4; stroke-width: 3; }
+  .map-label { font-size: 11px; fill: #233; pointer-events: none; text-anchor: middle; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+  .hidden { display: none; }
+  .ek-note { font-size: 12px; color: #5a6785; margin-top: 8px; line-height: 1.45; }
+  .clear-note { font-size: 12px; color: #5a6785; margin-top: 8px; line-height: 1.45; }
+  @media (max-width: 820px) { .layout { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Provinciale Staten 2027 — Poll Projection</h1>
+  <p>Enter one national poll below. It is projected uniformly onto all 12 provinces (D'Hondt, per-province seat counts), and the Eerste Kamer composition is estimated from the resulting States-Provincial seats.</p>
+</header>
+
+<div class="layout">
+  <!-- ===== Left column: poll input + map ===== -->
+  <div>
+    <div class="card">
+      <h2>1. Enter national poll</h2>
+      <table id="pollTable">
+        <thead><tr><th style="width:30%">Party</th><th>%</th><th style="width:36px">Colour</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="sumline">
+        <span id="sumLabel"></span>
+        <button id="addParty">+ Party</button>
+        <button id="normalize">Normalise to 100%</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>2. Click a province</h2>
+      <svg id="map" viewBox="0 0 520 600" role="img" aria-label="Map of the twelve Dutch provinces"></svg>
+    </div>
+  </div>
+
+  <!-- ===== Right column: results ===== -->
+  <div>
+    <div class="card" id="provinceCard">
+      <div class="prov-title"><h2 id="provName">Select a province</h2><span id="provSeats"></span></div>
+      <div id="provBody">
+        <p style="color:#5a6785;font-size:13px;margin:6px 0">Click a province on the map to see its projected parliament.</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>3. Eerste Kamer estimate</h2>
+      <p class="ek-note">The 75 Senate seats are chosen by the 572 members of the twelve States-Provincial (plus small Caribbean electoral colleges). This starter estimates them by running D'Hondt over each party's <em>total provincial seats</em> nationwide — a good first approximation of the weighted-vote system.</p>
+      <div id="ekBody"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   DATA
+   ========================================================= */
+// Provincial seat counts (Provinciale Staten 2023–2027 term).
+// Update these if the Kiesraad changes them before 18 March 2027.
+const PROVINCES = [
+  { id: "GR",  name: "Groningen",       seats: 43, poly: [[400,40],[470,55],[465,95],[420,110],[385,90]], label: [427,72] },
+  { id: "FR",  name: "Friesland",       seats: 43, poly: [[250,60],[340,30],[390,45],[385,95],[300,110],[255,100]], label: [320,72] },
+  { id: "DR",  name: "Drenthe",         seats: 41, poly: [[385,95],[420,110],[465,95],[470,130],[430,165],[390,140]], label: [427,128] },
+  { id: "OV",  name: "Overijssel",      seats: 47, poly: [[430,165],[470,130],[500,150],[505,200],[470,235],[435,210]], label: [466,190] },
+  { id: "FL",  name: "Flevoland",       seats: 41, poly: [[360,160],[420,170],[430,230],[390,255],[355,225]], label: [393,208] },
+  { id: "NH",  name: "Noord-Holland",   seats: 55, poly: [[200,30],[260,20],[285,60],[275,120],[230,140],[185,110]], label: [237,80] },
+  { id: "UT",  name: "Utrecht",         seats: 49, poly: [[270,150],[320,150],[335,200],[305,225],[265,210]], label: [298,186] },
+  { id: "GE",  name: "Gelderland",      seats: 55, poly: [[330,200],[390,205],[450,220],[455,290],[400,330],[340,300]], label: [393,265] },
+  { id: "ZH",  name: "Zuid-Holland",    seats: 55, poly: [[200,160],[275,150],[300,200],[295,260],[230,280],[185,240]], label: [243,215] },
+  { id: "ZE",  name: "Zeeland",         seats: 39, poly: [[120,320],[210,300],[235,340],[200,380],[150,375],[105,350]], label: [168,343] },
+  { id: "NB",  name: "Noord-Brabant",   seats: 55, poly: [[210,300],[320,300],[420,320],[430,390],[350,435],[250,420],[195,370]], label: [312,368] },
+  { id: "LI",  name: "Limburg",         seats: 47, poly: [[390,390],[430,435],[455,470],[440,540],[410,555],[395,490]], label: [423,475] },
+];
+
+// Default party list + colours. Fully editable in the UI.
+let poll = [
+  { name: "PVV",        pct: 22, colour: "#1c2f6b" },
+  { name: "GL-PvdA",    pct: 16, colour: "#3cb879" },
+  { name: "VVD",        pct: 14, colour: "#2455a4" },
+  { name: "NSC",        pct: 10, colour: "#8e6f3e" },
+  { name: "BBB",        pct: 8,  colour: "#5db4e7" },
+  { name: "D66",        pct: 7,  colour: "#6ec06e" },
+  { name: "CDA",        pct: 6,  colour: "#23b14d" },
+  { name: "PvdD",       pct: 5,  colour: "#00693e" },
+  { name: "CU",         pct: 3,  colour: "#26a6df" },
+  { name: "SP",         pct: 3,  colour: "#d64550" },
+  { name: "SGP",        pct: 2,  colour: "#e07b39" },
+  { name: "FvD",        pct: 2,  colour: "#8b4a9e" },
+];
+
+/* =========================================================
+   SEAT MATH — D'Hondt
+   ========================================================= */
+function dhondt(pollRows, totalSeats) {
+  // Returns [{ index, seats }] for each party in pollRows (0 seats if below quota).
+  const candidates = [];
+  pollRows.forEach((p, i) => {
+    for (let s = 1; s <= totalSeats; s++) {
+      candidates.push({ party: i, quotient: p.pct / s });
+    }
+  });
+  candidates.sort((a, b) => b.quotient - a.quotient);
+  const result = pollRows.map(() => 0);
+  candidates.slice(0, totalSeats).forEach(c => result[c.party]++);
+  return result;
+}
+
+function projectProvince(pollRows, province) {
+  const seats = dhondt(pollRows, province.seats);
+  return pollRows.map((p, i) => ({ ...p, seats: seats[i] })).filter(p => p.seats > 0);
+}
+
+/* =========================================================
+   PARLIAMENT DIAGRAM (hemicycle)
+   ========================================================= */
+function hemicycleSVG(rows, totalSeats, width) {
+  // One arc of seats, ordered left-to-right, centred on 90° (up).
+  // Like the Dutch Tweede Kamer display but simplified to a single row.
+  const r = 130, cx = width / 2, cy = 175, seatR = 7;
+  const parts = [];
+  rows.forEach(p => parts.push(...Array(p.seats).fill(p)));
+  const n = parts.length;
+  const gap = Math.PI / (n - 1 || 1); // 180°
+  parts.forEach((p, i) => {
+    const a = gap * i; // 0 = left, PI = right
+    const x = cx - Math.cos(a) * r;
+    const y = cy - Math.sin(a) * r;
+    parts[i] = { x, y, p };
+  });
+  let svg = `<svg viewBox="0 0 ${width} 210" style="width:100%;max-width:${width}px">`;
+  // baseline
+  svg += `<line x1="${cx - r - 15}" y1="${cy}" x2="${cx + r + 15}" y2="${cy}" stroke="#dfe5f0" stroke-width="2"/>`;
+  parts.forEach(s => {
+    svg += `<circle cx="${s.x.toFixed(1)}" cy="${s.y.toFixed(1)}" r="${seatR}" fill="${s.p.colour}"><title>${s.p.name}</title></circle>`;
+  });
+  // Legend with labels is rendered as an HTML table under the SVG
+  return svg + "</svg>";
+
+function renderTable(rows, showPct) {
+  let html = '<table style="margin-top:8px">';
+  rows.forEach(p => {
+    html += `<tr>
+      <td><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${p.colour};margin-right:6px;vertical-align:-1px"></span>${p.name}</td>
+      ${showPct ? `<td>${p.pct.toFixed(1)}%</td>` : ""}
+      <td style="text-align:right"><b>${p.seats}</b></td></tr>`;
+  });
+  html += '</table>';
+  return html;
+}
+
+/* =========================================================
+   UI WIRING
+   ========================================================= */
+let selected = null;
+
+const tbody = document.querySelector("#pollTable tbody");
+const sumLabel = document.getElementById("sumLabel");
+
+function renderPollEditor() {
+  tbody.innerHTML = "";
+  poll.forEach((p, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="text" value="${p.name}" data-i="${i}" data-f="name"></td>
+      <td><input type="number" step="0.1" min="0" max="100" value="${p.pct}" data-i="${i}" data-f="pct"></td>
+      <td><input type="color" value="${p.colour}" data-i="${i}" data-f="colour"></td>
+      <td><button data-del="${i}" title="Remove">×</button></td>`;
+    tbody.appendChild(tr);
+  });
+  const sum = poll.reduce((a, p) => a + p.pct, 0);
+  sumLabel.textContent = `Total: ${sum.toFixed(1)}%`;
+  sumLabel.className = "sumline " + (Math.abs(sum - 100) > 0.05 ? "bad" : "");
+}
+
+tbody.addEventListener("input", e => {
+  const el = e.target;
+  const i = +el.dataset.i, f = el.dataset.f;
+  if (f === "pct") poll[i].pct = parseFloat(el.value) || 0;
+  else if (f === "name") poll[i].name = el.value;
+  else if (f === "colour") poll[i].colour = el.value;
+  const sum = poll.reduce((a, p) => a + p.pct, 0);
+  sumLabel.textContent = `Total: ${sum.toFixed(1)}%`;
+  sumLabel.className = "sumline " + (Math.abs(sum - 100) > 0.05 ? "bad" : "");
+  renderResults(); // live update
+});
+tbody.addEventListener("click", e => {
+  const i = e.target.dataset?.del;
+  if (i !== undefined) { poll.splice(+i, 1); renderPollEditor(); renderResults(); }
+});
+document.getElementById("addParty").onclick = () => {
+  poll.push({ name: "New party", pct: 0, colour: "#999999" });
+  renderPollEditor();
+};
+document.getElementById("normalize").onclick = () => {
+  const sum = poll.reduce((a, p) => a + p.pct, 0);
+  if (sum > 0) poll.forEach(p => p.pct = Math.round(p.pct / sum * 1000) / 10);
+  renderPollEditor(); renderResults();
+};
+
+// Map
+const mapSvg = document.getElementById("map");
+PROVINCES.forEach(pr => {
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  path.setAttribute("points", pr.poly.map(pt => pt.join(",")).join(" "));
+  path.setAttribute("class", "province");
+  path.setAttribute("id", "prov-" + pr.id);
+  const proj = projectProvince(poll, pr); // for tooltip
+  path.innerHTML = `<title>${pr.name} — ${pr.seats} seats</title>`;
+  path.addEventListener("click", () => {
+    selected = pr.id;
+    document.querySelectorAll(".province").forEach(el => el.classList.remove("selected"));
+    path.classList.add("selected");
+    renderResults();
+  });
+  mapSvg.appendChild(path);
+  const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  label.setAttribute("x", pr.label[0]); label.setAttribute("y", pr.label[1]);
+  label.setAttribute("class", "map-label");
+  label.textContent = pr.id; // short code; full name in detail panel
+  mapSvg.appendChild(label);
+});
+
+// Results
+function renderResults() {
+  // Province panel
+  if (selected) {
+    const pr = PROVINCES.find(p => p.id === selected);
+    const rows = projectProvince(poll, pr);
+    document.getElementById("provName").textContent = pr.name;
+    document.getElementById("provSeats").textContent = `${pr.seats} seats · election 18 March 2027`;
+    document.getElementById("provBody").innerHTML =
+      hemicycleSVG(rows, pr.seats, 380) + renderTable(rows, true);
+  }
+  // Senate estimate: D'Hondt over each party's total provincial seats
+  const natSeats = poll.map(p => 0);
+  PROVINCES.forEach(pr => {
+    const seats = dhondt(poll, pr.seats);
+    seats.forEach((s, i) => natSeats[i] += s);
+  });
+  const ekInput = poll.map((p, i) => ({ ...p, pct: natSeats[i] }));
+  const ekSeats = dhondt(ekInput, 75);
+  const ekRows = ekInput.map((p, i) => ({ ...p, seats: ekSeats[i] })).filter(p => p.seats > 0);
+  document.getElementById("ekBody").innerHTML =
+    hemicycleSVG(ekRows, 75, 520) + renderTable(ekRows, false) +
+    `<p class="clear-note">Note: uniform national shares are a simplification — real regional swings (e.g. BBB in rural provinces) shift the result. The Caribbean electoral colleges (3 weighted seats' worth) are not included.</p>`;
+}
+
+renderPollEditor();
+renderResults();
+</script>
+</body>
+</html>
